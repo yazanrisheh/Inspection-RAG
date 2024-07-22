@@ -3,19 +3,15 @@ from crewai_tools import PDFSearchTool
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
+import streamlit as st
+import os
+import tempfile
 
 load_dotenv()
 
-
+# LLM initialization
 # llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
-llm = ChatGroq(model = "mixtral-8x7b-32768", temperature = 0.2)
-
-
-# --- Tools ---
-# PDF SOURCE: https://www.gpinspect.com/wp-content/uploads/2021/03/sample-home-report-inspection.pdf
-pdf_search_tool = PDFSearchTool(
-    pdf="./sample-home-report-inspection.pdf",
-)
+llm = ChatGroq(model="mixtral-8x7b-32768", temperature=0.2)
 
 # --- Agents ---
 research_agent = Agent(
@@ -29,8 +25,8 @@ research_agent = Agent(
         extracting data from documents, ensuring accurate and prompt responses.
         """
     ),
-    tools=[pdf_search_tool],
-    llm =llm
+    tools=[],
+    llm=llm
 )
 
 professional_writer_agent = Agent(
@@ -45,9 +41,8 @@ professional_writer_agent = Agent(
         """
     ),
     tools=[],
-    llm = llm
+    llm=llm
 )
-
 
 # --- Tasks ---
 answer_customer_question_task = Task(
@@ -66,7 +61,7 @@ answer_customer_question_task = Task(
         Provide clear and accurate answers to the customer's questions based on 
         the content of the home inspection PDF.
         """,
-    tools=[pdf_search_tool],
+    tools=[],
     agent=research_agent,
 )
 
@@ -79,7 +74,7 @@ write_email_task = Task(
             of the report and request a quote or action plan for fixing these issues.
         - Ensure the email is signed with the following details:
         
-            Best regards,
+            Best regards, "\n"
             Saber Sinan
         """
     ),
@@ -98,10 +93,25 @@ crew = Crew(
     process=Process.sequential,
 )
 
-# customer_question = input("Which section of the report would you like to generate a work order for?\n")
-result = crew.kickoff(inputs={"customer_question": "Roof"})
-# result = crew.kickoff_for_each(inputs=[
-#     {"customer_question": "Roof"},
-#     {"customer_question": "electrical"}
-#     ])
-print(result)
+# Streamlit integration
+def main():
+    st.title("Construction Document Inspection")
+
+    with st.sidebar:
+        uploaded_file = st.file_uploader(label="Upload your inspection report", type=["pdf"])
+
+    if uploaded_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            tmp_file.write(uploaded_file.read())
+            pdf_path = tmp_file.name
+        
+        pdf_search_tool = PDFSearchTool(pdf=pdf_path)
+        research_agent.tools = [pdf_search_tool]
+
+        customer_question = st.chat_input("Your message")
+        if customer_question:
+            result = crew.kickoff(inputs={"customer_question": customer_question})
+            st.markdown(result)
+
+if __name__ == "__main__":
+    main()
